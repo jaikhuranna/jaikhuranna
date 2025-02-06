@@ -4,9 +4,7 @@
 
 ![image](https://gitmystat.vercel.app/recent?username=jaikhuranna&color=0xaeaeae&accent=0x075fff&background=0x000000&border=0x075fff&tip=0x075fff&radius=12&padding=24)
 # 📊 GitHub Stats:
-![](https://github-readme-stats.vercel.app/api?username=jaikhuranna&theme=dark&hide_border=false&include_all_commits=true&count_private=true)<br/>
 ![](https://github-readme-streak-stats.herokuapp.com/?user=jaikhuranna&theme=dark&hide_border=false)<br/>
-![](https://github-readme-stats.vercel.app/api/top-langs/?username=jaikhuranna&theme=dark&hide_border=false&include_all_commits=true&count_private=true&layout=compact)
 
   
 <!-- Proudly created with GPRM ( https://gprm.itsvg.in ) -->
