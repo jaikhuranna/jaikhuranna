@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="280" viewBox="0 0 800 280">
+  <rect width="800" height="280" fill="#FFD02F"/>
+
+  <rect x="52" y="64" width="696" height="180" fill="#000000"/>
+  <rect x="40" y="52" width="696" height="180" fill="#FFFFFF" stroke="#000000" stroke-width="6"/>
+
+  <text x="76" y="146" font-family="Helvetica, Arial, sans-serif" font-size="62" font-weight="900" letter-spacing="2" fill="#000000">JAI KHURANA</text>
+
+  <rect x="82" y="182" width="400" height="44" fill="#000000"/>
+  <rect x="76" y="176" width="400" height="44" fill="#FF6B9D" stroke="#000000" stroke-width="4"/>
+  <text x="98" y="205" font-family="'Courier New', monospace" font-size="17" font-weight="bold" fill="#000000">SOFTWARE ENGINEER &#183; PAYGLOCAL</text>
+
+  <rect x="596" y="76" width="44" height="44" fill="#4DE3FF" stroke="#000000" stroke-width="4"/>
+  <rect x="652" y="132" width="44" height="44" fill="#B6FF4D" stroke="#000000" stroke-width="4"/>
+</svg>
