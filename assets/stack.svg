@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="64" viewBox="0 0 480 64" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+<style>.m{font-family:ui-monospace,SFMono-Regular,'SF Mono','Roboto Mono',Menlo,Consolas,'DejaVu Sans Mono',monospace;font-size:13px;font-weight:700}
+.hl{opacity:0;animation:hl 6s ease infinite}
+@keyframes hl{0%{opacity:0}3%{opacity:1}17%{opacity:1}20%{opacity:0}100%{opacity:0}}</style>
+<rect width="480" height="64" rx="22" fill="#000"/><rect x=".5" y=".5" width="479" height="63" rx="22" fill="none" stroke="#262626"/>
+<rect x="35.2" y="16" width="47.2" height="32" rx="16" fill="none" stroke="#444"/><text class="m" x="50.2" y="37" fill="#eee" textLength="17.2">GO</text><g class="hl" style="animation-delay:0.0s"><rect x="35.2" y="16" width="47.2" height="32" rx="16" fill="#ff3b30"/><text class="m" x="50.2" y="37" fill="#fff" textLength="17.2">GO</text></g>
+<rect x="91.4" y="16" width="81.6" height="32" rx="16" fill="none" stroke="#444"/><text class="m" x="106.4" y="37" fill="#eee" textLength="51.6">KOTLIN</text><g class="hl" style="animation-delay:1.2s"><rect x="91.4" y="16" width="81.6" height="32" rx="16" fill="#fff"/><text class="m" x="106.4" y="37" fill="#000" textLength="51.6">KOTLIN</text></g>
+<rect x="182.0" y="16" width="73.0" height="32" rx="16" fill="none" stroke="#444"/><text class="m" x="197.0" y="37" fill="#eee" textLength="43.0">SWIFT</text><g class="hl" style="animation-delay:2.4s"><rect x="182.0" y="16" width="73.0" height="32" rx="16" fill="#fff"/><text class="m" x="197.0" y="37" fill="#000" textLength="43.0">SWIFT</text></g>
+<rect x="264.0" y="16" width="116.0" height="32" rx="16" fill="none" stroke="#444"/><text class="m" x="279.0" y="37" fill="#eee" textLength="86.0">TYPESCRIPT</text><g class="hl" style="animation-delay:3.6s"><rect x="264.0" y="16" width="116.0" height="32" rx="16" fill="#fff"/><text class="m" x="279.0" y="37" fill="#000" textLength="86.0">TYPESCRIPT</text></g>
+<rect x="389.0" y="16" width="55.8" height="32" rx="16" fill="none" stroke="#444"/><text class="m" x="404.0" y="37" fill="#eee" textLength="25.8">SQL</text><g class="hl" style="animation-delay:4.8s"><rect x="389.0" y="16" width="55.8" height="32" rx="16" fill="#fff"/><text class="m" x="404.0" y="37" fill="#000" textLength="25.8">SQL</text></g>
+</svg>
