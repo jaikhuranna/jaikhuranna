@@ -36,5 +36,14 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
+          # Another run may have pushed since checkout: commit these outputs on top of
+          # the latest main instead of failing. They are generated, so ours win.
+          git fetch origin main
+          git reset --soft origin/main
+          git add -A README.md assets
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
           git commit -m "chore: refresh profile stats"
-          git push
+          git push origin HEAD:main
