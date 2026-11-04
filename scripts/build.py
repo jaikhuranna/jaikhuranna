@@ -12,7 +12,7 @@ Edit PROJECTS / ROLE / STACK below to change what the profile shows.
 Stdlib only. If the API is unreachable it falls back to assets/data.json.
 """
 import hashlib, json, math, os, random, sys, urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from html import escape as e
 
 USER = "jaikhuranna"
@@ -73,17 +73,41 @@ def fetch():
     if building:
         data["building"] = {"name": building[0]["name"], "lang": building[0]["language"]}
     try:
-        q = ('query($u:String!){user(login:$u){contributionsCollection{contributionCalendar{'
-             'totalContributions weeks{contributionDays{date contributionLevel}}}}}}')
-        cal = api("https://api.github.com/graphql", {"query": q, "variables": {"u": USER}})
-        cal = cal["data"]["user"]["contributionsCollection"]["contributionCalendar"]
-        lv = {"NONE": 0, "FIRST_QUARTILE": 1, "SECOND_QUARTILE": 2, "THIRD_QUARTILE": 3, "FOURTH_QUARTILE": 4}
-        data["total"] = cal["totalContributions"]
-        # oldest first; the calendar ends today, so the last day is today
-        data["days"] = [lv[d["contributionLevel"]] for w in cal["weeks"] for d in w["contributionDays"]]
+        data.update(contributions())
     except Exception as ex:  # GraphQL needs a token; keep the old field if it fails
         print("contributions unavailable:", ex, file=sys.stderr)
     return data
+
+
+HISTORY_YEARS = 3  # enough that the field is always full of real days, never padding
+
+
+def contributions():
+    """Days oldest first as [date, level, count]; the last day is today.
+
+    GitHub answers at most a year per contributionsCollection, so ask for
+    several back-to-back years in one query and stitch them together."""
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    var, fields, args = {"u": USER}, [], ["$u:String!"]
+    for k in range(HISTORY_YEARS):
+        var[f"f{k}"] = (now - timedelta(days=365 * (k + 1))).isoformat()
+        var[f"t{k}"] = (now - timedelta(days=365 * k)).isoformat()
+        args += [f"$f{k}:DateTime!", f"$t{k}:DateTime!"]
+        fields.append(f"y{k}:contributionsCollection(from:$f{k},to:$t{k}){{contributionCalendar{{"
+                      "totalContributions weeks{contributionDays{date contributionLevel contributionCount}}}}")
+    q = f"query({','.join(args)}){{user(login:$u){{{' '.join(fields)}}}}}"
+    res = api("https://api.github.com/graphql", {"query": q, "variables": var})
+    if res.get("errors"):
+        raise RuntimeError(res["errors"])
+    user = res["data"]["user"]
+    lv = {"NONE": 0, "FIRST_QUARTILE": 1, "SECOND_QUARTILE": 2, "THIRD_QUARTILE": 3, "FOURTH_QUARTILE": 4}
+    by_date = {}
+    for k in range(HISTORY_YEARS):
+        for w in user[f"y{k}"]["contributionCalendar"]["weeks"]:
+            for d in w["contributionDays"]:
+                by_date[d["date"]] = [d["date"], lv[d["contributionLevel"]], d["contributionCount"]]
+    days = [by_date[k] for k in sorted(by_date)]
+    return {"total": user["y0"]["contributionCalendar"]["totalContributions"], "days": days}
 
 
 def load():
@@ -266,11 +290,12 @@ GAP_SHARE, QUIET_DAYS, QUIET_COLUMNS = .30, 21, 3
 
 
 def slots_of(days, rows):
-    """days oldest first, last is today. Returns slots newest first."""
+    """days: levels oldest first, last is today. Returns slots newest first.
+    ("day", level, is_today, index) or ("quiet", run, to_edge, oldest index, newest hidden index)."""
     slots, cells, i, last = [], 0, len(days) - 1, len(days) - 1
     while i >= 0:
         if days[i] > 0 or i == last:
-            slots.append(("day", days[i], i == last)); cells += 1; i -= 1
+            slots.append(("day", days[i], i == last, i)); cells += 1; i -= 1
             continue
         j = i
         while j >= 0 and days[j] == 0 and j != last:
@@ -281,10 +306,12 @@ def slots_of(days, rows):
         hidden = run - lead - trail
         folds = run >= QUIET_DAYS and (hidden > 0 if to_edge else hidden > QUIET_COLUMNS * rows)
         if folds:
-            slots += [("day", 0, False)] * lead + [("quiet", run, to_edge)] + [("day", 0, False)] * trail
+            slots += [("day", 0, False, m) for m in range(i, i - lead, -1)]
+            slots.append(("quiet", run, to_edge, j + 1, i - lead))
+            slots += [("day", 0, False, m) for m in range(j + trail, j, -1)]
             cells += lead + trail + QUIET_COLUMNS * rows
         else:
-            slots += [("day", 0, False)] * run
+            slots += [("day", 0, False, m) for m in range(i, j, -1)]
             cells += run
         i = j
     return slots
@@ -308,7 +335,7 @@ def field(days, left, top, columns, rows, pitch, label_size):
     cx = lambda k: left + (columns - 1 - k // rows) * pitch + pitch / 2
     cy = lambda k: top + (rows - 1 - k % rows) * pitch + pitch / 2
     delay = lambda k: .2 + (k // rows) * .035
-    out, k = [], 0
+    out, k, oldest = [], 0, len(days) - 1
 
     def mark(k, lv, today):
         x, y, dl = cx(k), cy(k), delay(k)
@@ -327,12 +354,15 @@ def field(days, left, top, columns, rows, pitch, label_size):
             break
         if slot[0] == "day":
             out.append(mark(k, slot[1], slot[2])); k += 1
+            oldest = slot[3]
             continue
         remaining = columns - k // rows
         span = remaining if slot[2] else min(QUIET_COLUMNS, remaining)
         if span < 2:
+            n = cap - k
             while k < cap:
                 out.append(mark(k, 0, False)); k += 1
+            oldest = slot[4] - n + 1
             break
         x1, x2 = left + (remaining - span) * pitch, left + remaining * pitch
         inset, mid = pitch * .35, top + pitch * rows * .58
@@ -344,9 +374,10 @@ def field(days, left, top, columns, rows, pitch, label_size):
         out.append(f'<text class="t m" style="animation-delay:{dl+.3:.2f}s" x="{(x1+x2)/2:.1f}" y="{mid-amp-pitch*.75:.1f}" '
                    f'font-size="{label_size}" fill="{INK}" fill-opacity=".72" text-anchor="middle" letter-spacing="0">{how_long(slot[1])}</text>')
         k += span * rows
-    while k < cap:  # before the history GitHub sent
+        oldest = slot[3]
+    while k < cap:  # before the history GitHub sent (only if the API gave too little)
         out.append(f'<circle cx="{cx(k):.1f}" cy="{cy(k):.1f}" r="{cell*SCALES[0]/2:.2f}" fill="{INK}" fill-opacity=".12"/>'); k += 1
-    return "".join(out)
+    return "".join(out), oldest
 
 
 FIELD_CSS = BASE_CSS + """
@@ -376,15 +407,29 @@ def stats(d, x, y, w, pitch, r, label_y):
     return "".join(out)
 
 
+def day_rows(d):
+    rows = d.get("days") or [[None, 0, 0]]
+    return [r if isinstance(r, list) else [None, r, 0] for r in rows]
+
+
+def field_labels(rows, oldest):
+    """'SINCE MAR 2025' and the contributions in exactly the days drawn."""
+    first = rows[oldest][0]
+    since = datetime.fromisoformat(first).strftime("SINCE %b %Y").upper() if first else "LAST YEAR"
+    return since, sum(r[2] for r in rows[oldest:])
+
+
 def activity(d):
     W, H, P = 480, 262, 12
-    days = d.get("days") or [0]
+    rows = day_rows(d)
     cols = int((W - 48) // P)
     left = (W - cols * P) / 2
+    dots, oldest = field([r[1] for r in rows], left, 54, cols, 7, P, 11)
+    since, count = field_labels(rows, oldest)
     b = [panel(W, H, 26),
-         f'<text class="t" x="24" y="36" font-size="12" fill="#8a8a8a">ACTIVITY · LAST YEAR</text>',
-         f'<text class="t" x="{W-24}" y="36" font-size="12" fill="#fff" text-anchor="end">{d.get("total", 0)} CONTRIBUTIONS</text>',
-         field(days, left, 54, cols, 7, P, 11),
+         f'<text class="t" x="24" y="36" font-size="12" fill="#8a8a8a">ACTIVITY · {since}</text>',
+         f'<text class="t" x="{W-24}" y="36" font-size="12" fill="#fff" text-anchor="end">{count} CONTRIBUTIONS</text>',
+         dots,
          f'<line x1="24" x2="{W-24}" y1="158" y2="158" stroke="#1e1e1e"/>',
          stats(d, 24, 182, W - 48, 6, 2.4, 244)]
     return svg(W, H, "\n".join(b), FIELD_CSS)
@@ -392,13 +437,15 @@ def activity(d):
 
 def activity_wide(d):
     W, H, P = 960, 188, 13.5
-    days = d.get("days") or [0]
+    rows = day_rows(d)
     cols = int(540 // P)
     fx = 32 + cols * P
+    dots, oldest = field([r[1] for r in rows], 32, 58, cols, 7, P, 12)
+    since, count = field_labels(rows, oldest)
     b = [panel(W, H, 24),
-         f'<text class="t" x="32" y="40" font-size="12" fill="#8a8a8a">ACTIVITY · LAST YEAR</text>',
-         f'<text class="t" x="{fx:.0f}" y="40" font-size="12" fill="#fff" text-anchor="end">{d.get("total", 0)} CONTRIBUTIONS</text>',
-         field(days, 32, 58, cols, 7, P, 12),
+         f'<text class="t" x="32" y="40" font-size="12" fill="#8a8a8a">ACTIVITY · {since}</text>',
+         f'<text class="t" x="{fx:.0f}" y="40" font-size="12" fill="#fff" text-anchor="end">{count} CONTRIBUTIONS</text>',
+         dots,
          f'<line x1="{fx+28:.0f}" x2="{fx+28:.0f}" y1="28" y2="{H-28}" stroke="#1e1e1e"/>',
          stats(d, fx + 56, 70, W - (fx + 56) - 32, 6, 2.4, 140)]
     return svg(W, H, "\n".join(b), FIELD_CSS)
@@ -506,18 +553,13 @@ def stack(W=480, H=64):
     cw, pad, gap = 8.6, 15, 9
     widths = [len(t) * cw + pad * 2 for t in STACK]
     x = (W - sum(widths) - gap * (len(STACK) - 1)) / 2
-    css = f""".m{{font-family:{MONO};font-size:13px;font-weight:700}}
-.hl{{opacity:0;animation:hl 6s ease infinite}}
-@keyframes hl{{0%{{opacity:0}}3%{{opacity:1}}17%{{opacity:1}}20%{{opacity:0}}100%{{opacity:0}}}}"""
+    css = f".m{{font-family:{MONO};font-size:13px;font-weight:700}}"
     b = [panel(W, H, 22)]
     y = (H - 32) / 2
     for k, (t, w) in enumerate(zip(STACK, widths)):
         tl = len(t) * cw
-        hb, ht = (RED, "#fff") if k == 0 else ("#fff", "#000")
         b.append(f'<rect x="{x:.1f}" y="{y}" width="{w:.1f}" height="32" rx="16" fill="none" stroke="#444"/>'
-                 f'<text class="m" x="{x+pad:.1f}" y="{y+21}" fill="#eee" textLength="{tl:.1f}">{t}</text>'
-                 f'<g class="hl" style="animation-delay:{k*1.2:.1f}s"><rect x="{x:.1f}" y="{y}" width="{w:.1f}" height="32" rx="16" fill="{hb}"/>'
-                 f'<text class="m" x="{x+pad:.1f}" y="{y+21}" fill="{ht}" textLength="{tl:.1f}">{t}</text></g>')
+                 f'<text class="m" x="{x+pad:.1f}" y="{y+21}" fill="#eee" textLength="{tl:.1f}">{t}</text>')
         x += w + gap
     return svg(W, H, "\n".join(b), css)
 
