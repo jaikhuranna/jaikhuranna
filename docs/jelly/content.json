@@ -1,0 +1,31 @@
+{
+  "name": "Jai Khurana",
+  "role": "Software engineer at PayGlocal",
+  "place": "Bengaluru",
+  "projects": [
+    {
+      "name": "git-huh",
+      "description": "GitHub on my phone: contribution charts, an inbox, pull requests and a home for project ideas.",
+      "language": "TypeScript",
+      "url": "https://github.com/jaikhuranna/git-huh"
+    },
+    {
+      "name": "AIusageBar",
+      "description": "Claude and Codex subscription limits across desktop, phone and wrist. One Go server, native widgets.",
+      "language": "Kotlin",
+      "url": "https://github.com/jaikhuranna/AIusageBar"
+    },
+    {
+      "name": "nothing-mtui",
+      "description": "Material You colours on Nothing OS",
+      "language": "JavaScript",
+      "url": "https://github.com/jaikhuranna/nothing-mtui"
+    },
+    {
+      "name": "sitewatch",
+      "description": "Page watcher with Telegram alerts",
+      "language": "Go",
+      "url": "https://github.com/jaikhuranna/sitewatch"
+    }
+  ]
+}
