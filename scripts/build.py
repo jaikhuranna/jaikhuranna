@@ -168,6 +168,11 @@ FONT = {
     "7": ["#####", "....#", "...#.", "..#..", ".#...", ".#...", ".#..."],
     "8": [".###.", "#...#", "#...#", ".###.", "#...#", "#...#", ".###."],
     "9": [".###.", "#...#", "#...#", ".####", "....#", "....#", ".###."],
+    "F": ["#####", "#....", "####.", "#....", "#....", "#....", "#...."],
+    "L": ["#....", "#....", "#....", "#....", "#....", "#....", "#####"],
+    "O": [".###.", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."],
+    "P": ["####.", "#...#", "#...#", "####.", "#....", "#....", "#...."],
+    "T": ["#####", "..#..", "..#..", "..#..", "..#..", "..#..", "..#.."],
 }
 
 
@@ -197,6 +202,154 @@ BASE_CSS = f""".t{{font-family:{MONO};letter-spacing:2px}}
 .rec{{animation:rec 1.2s steps(1) infinite}}
 @keyframes rec{{0%{{opacity:1}}50%{{opacity:.15}}}}
 """
+
+
+# ------------------------------------------------------------------ glass
+# Under glass: every panel is a curved slab floating in a black void, shaded
+# only with ordered (Bayer 4x4) dither — flat fills plus 1-bit cells, like a
+# PSX-era renderer — with slime draped over the glass. SMIL wobbles the slime.
+DEEP = "#d71921"    # blood red
+DARKR = "#4d0907"   # dried red (slime shade)
+JELLY = "#a41311"   # slime body
+BAYER = ((0, 8, 2, 10), (12, 4, 14, 6), (3, 11, 1, 9), (15, 7, 13, 5))
+CELL = 5
+
+
+def dither(x0, y0, w, h, fn, cell=CELL, clip=None):
+    """Ordered dithering: fn(x, y) -> (brightness 0..1, colour) or None for
+    empty. Emits one compact <path> per colour of square cells."""
+    lit = {}
+    cols, rows = math.ceil(w / cell), math.ceil(h / cell)
+    for r in range(rows):
+        py = y0 + r * cell
+        for c in range(cols):
+            px = x0 + c * cell
+            s = fn(px + cell / 2, py + cell / 2)
+            if not s:
+                continue
+            v, colour = s
+            if v <= 0 or v * 16 <= BAYER[r % 4][c % 4]:
+                continue
+            lit.setdefault(colour, []).append(f"M{px:.0f} {py:.0f}h{cell:g}v{cell:g}h-{cell:g}z")
+    body = "".join(f'<path fill="{k}" d="{"".join(ps)}"/>' for k, ps in lit.items())
+    return f'<g clip-path="url(#{clip})">{body}</g>' if clip else body
+
+
+def rad(px, py, cx, cy, rx, ry):
+    d = math.hypot((px - cx) / rx, (py - cy) / ry)
+    return max(0., 1. - d) ** 2
+
+
+def slab_d(x, y, w, h, sag):
+    """A panel bowed toward the viewer: vertical sides, top and bottom edges
+    swelling `sag` past the corners (a quadratic each)."""
+    return (f"M{x:.1f} {y:.1f}Q{x + w / 2:.1f} {y + 2 * sag:.1f} {x + w:.1f} {y:.1f}"
+            f"L{x + w:.1f} {y + h:.1f}Q{x + w / 2:.1f} {y + h + 2 * sag:.1f} {x:.1f} {y + h:.1f}Z")
+
+
+def top_d(x, y, w, sag):
+    return f"M{x:.1f} {y:.1f}Q{x + w / 2:.1f} {y + 2 * sag:.1f} {x + w:.1f} {y:.1f}"
+
+
+def slab_shade(x, y, w, h, sag, glow, sheen=.62, rim=.7):
+    """Slab shading: red under-glow, a thin diagonal glass sheen, rim light
+    along the bowed top edge and a whisper of light on the side edges."""
+    gx, gy, grx, gry, gw = glow
+    def fn(px, py):
+        u = (px - x) / w
+        topy = y + 4 * sag * u * (1 - u)
+        vw = max(0., 1. - (py - topy) / 9.) * rim
+        edge = min(px - x, x + w - px)
+        if edge < 5:
+            vw = max(vw, (1 - edge / 5.) * .25)
+        t = (u + (py - y) / h * sheen) / (1 + sheen)
+        vw = max(vw, max(0., 1. - abs(t - .7) * 30.) * .07)
+        vr = rad(px, py, gx, gy, grx, gry) * gw
+        vr = 0 if vr < .05 else min(1., vr)
+        if vw >= vr:
+            return (vw, "#e8e8e8") if vw > .07 else None
+        return (vr, DEEP)
+    return fn
+
+
+def glass_slab(x, y, w, h, sag, glow, tilt=0., base="#080808", id_="s", rim=.7, sheen=.62, stroke=True):
+    """Curved dark slab with dither shading and a rim light, tilted as a group."""
+    cid = id_ + "c"
+    return "\n".join([
+        f'<defs><clipPath id="{cid}"><path d="{slab_d(x, y, w, h, sag)}"/></clipPath></defs>',
+        f'<g transform="rotate({tilt} {x + w / 2:.0f} {y + h / 2:.0f})">',
+        f'<path d="{slab_d(x, y, w, h, sag)}" fill="{base}"/>',
+        dither(x - 2, y - 2, w + 4, h + 4, slab_shade(x, y, w, h, sag, glow, sheen, rim), clip=cid),
+        f'<path d="{slab_d(x, y, w, h, sag)}" fill="none" stroke="#262626"/>',
+        f'<path d="{top_d(x, y, w, sag)}" fill="none" stroke="#f4f4f4" stroke-opacity=".45" stroke-width="1.3"/>' if stroke else '',
+        '</g>'])
+
+
+def void_shade(W, H, glow, seed=7, stars=.003):
+    """The void behind the glass: red horizon glow plus sparse dust."""
+    gx, gy, grx, gry, gw = glow
+    rnd = random.Random(seed)
+    def fn(px, py):
+        p = rnd.random()
+        if p < stars * .5:
+            return (.5, "#9c9c9c")
+        if p < stars:
+            return (.7, DEEP)
+        vr = rad(px, py, gx, gy, grx, gry) * gw
+        return (min(1., vr), DEEP) if vr > .07 else None
+    return fn
+
+
+def jelly_d(x0, x1, y, thick, seed, dmin=6., dmax=26.):
+    """Slime draped over the line y: a smooth top bulging `thick` upward, the
+    underside hanging in random drops between dmin and dmax."""
+    rnd = random.Random(seed)
+    n = max(3, round((x1 - x0) / 55))
+    span = (x1 - x0) / n
+    d = [f"M{x0:.1f} {y + 2:.1f}",
+         f"Q{(x0 + x1) / 2:.1f} {y - 1.7 * thick:.1f} {x1:.1f} {y + 2:.1f}"]
+    for k in range(n):  # underside, right to left
+        xr, xl = x1 - k * span, x1 - (k + 1) * span
+        dep = rnd.uniform(dmin, dmax)
+        d.append(f"C{xr - span * .18:.1f} {y + dep:.1f} {xl + span * .18:.1f} {y + dep:.1f} {xl:.1f} {y + 2:.1f}")
+    d.append("Z")
+    return "".join(d)
+
+
+def jelly_shade(y, thick, deep):
+    """Slime shading: pale gloss on the top face, fading down the drops into
+    dried red at the tips."""
+    def fn(px, py):
+        if py <= y:
+            v = 1. - (y - py) / max(thick, 1.)
+            return (min(.78, v + .4), "#ffd9d6") if v > -.55 else None
+        hang = py - y
+        vw = max(0., .5 - hang / deep)
+        vd = min(1., max(0., (hang - deep * .45) / (deep * .55)))
+        if vd >= vw:
+            return (vd * .9, DARKR) if vd > .2 else None
+        return (vw, "#ff6c62") if vw > .12 else None
+    return fn
+
+
+SPLINE = 'calcMode="spline" keySplines=".4 0 .6 1;.4 0 .6 1;.4 0 .6 1"'
+
+
+def jelly(x0, x1, y, thick, seed, id_, dmin=6., dmax=26., dur=5.6, opacity=1.):
+    """A slime sheet over the glass: dither shading, wobbling in place."""
+    d = jelly_d(x0, x1, y, thick, seed, dmin, dmax)
+    cid, cx = id_ + "j", (x0 + x1) / 2
+    return (f'<g opacity="{opacity}">'
+            f'<animateTransform attributeName="transform" type="translate" additive="sum" dur="{dur:.1f}s" '
+            f'repeatCount="indefinite" {SPLINE} keyTimes="0;.3;.65;1" values="0 0;0 2.2;0 -1.4;0 0"/>'
+            f'<animateTransform attributeName="transform" type="rotate" additive="sum" dur="{dur * 1.4:.1f}s" '
+            f'repeatCount="indefinite" {SPLINE} keyTimes="0;.33;.66;1" '
+            f'values="0 {cx:.0f} {y:.0f};.9 {cx:.0f} {y:.0f};-.7 {cx:.0f} {y:.0f};0 {cx:.0f} {y:.0f}"/>'
+            f'<defs><clipPath id="{cid}"><path d="{d}"/></clipPath></defs>'
+            f'<path d="{d}" fill="{JELLY}"/>'
+            + dither(x0 - 2, y - 2.2 * thick - 2, x1 - x0 + 4, 2.2 * thick + dmax + 6,
+                     jelly_shade(y, thick, max(dmax, 20)), clip=cid) +
+            f'<path d="{d}" fill="none" stroke="#6b0c0a" stroke-opacity=".85"/></g>')
 
 
 # ------------------------------------------------------------------ header
@@ -234,47 +387,64 @@ def now_building(d):
     return f'{bl["name"].upper()[:16]} / {(bl["lang"] or "").upper()}'.rstrip(" /") if bl else "SOMETHING NEW"
 
 
-def header_top(W, H, x0, y0, P, rx):
-    return [f'<defs><clipPath id="r"><rect width="{W}" height="{H}" rx="{rx}"/></clipPath>'
-            f'<pattern id="g" width="{P}" height="{P}" patternUnits="userSpaceOnUse" x="{x0-P/2:.2f}" y="{y0-P/2:.2f}">'
-            f'<circle cx="{P/2}" cy="{P/2}" r="1.7" fill="#1e1e1e"/></pattern></defs>',
-            f'<g clip-path="url(#r)"><rect width="{W}" height="{H}" fill="#000"/><rect width="{W}" height="{H}" fill="url(#g)"/></g>',
-            f'<rect x=".5" y=".5" width="{W-1}" height="{H-1}" rx="{rx}" fill="none" stroke="#262626"/>']
+def header_scene(d, wide=False, cover=False):
+    """The name on a curved glass slab floating over a red horizon, slime on
+    the top edge. cover=True pours slime over the whole panel (the uncover
+    interaction: closed <details> shows this, open shows the clear panel)."""
+    if wide:
+        W, P = 960, 12.2
+        sx, sy, sw, sh, sag = 28, 44, 904, 210, 8
+        x0, y0 = (W - (dotmap(" ".join(NAME))[1] - 1) * P) / 2, 90
+        m = x0 - 4
+    else:
+        W, P = 480, 10.2
+        sx, sy, sw, sh, sag = 24, 52, 432, 304, 9
+        x0, y0 = (W - 41 * P) / 2 + P / 2, 108
+        m = x0 - 4
+    glow = (W / 2, sy + sh, sw * .3, sh * .3, .35)           # horizon glow pooled on the slab floor
+    back = (W * .45, sy - 18, 180, 26, .3)                   # its own light on the back slab
+    b = [f'<rect width="{W}" height="{sy + sh + sag + 14:.0f}" fill="#050505"/>',
+         dither(0, 0, W, sy + sh + sag + 14,
+                void_shade(W, sy + sh, (W / 2, sy + sh * .62, sw * .5, sh * .55, .32)), cell=7),
+         glass_slab(sx + 34, sy - 24, sw - 68, sh * .42, sag * .7, back, tilt=4., id_="b", rim=.15, sheen=0., stroke=False),
+         glass_slab(sx, sy, sw, sh, sag, glow, tilt=-1.2, id_="h"),
+         f'<text class="t" x="{sx + 28}" y="{sy + 36}" font-size="12" fill="#9a9a9a">{USER.upper()}</text>',
+         f'<text class="t" x="{sx + sw - 44}" y="{sy + 36}" font-size="12" fill="#9a9a9a" text-anchor="end">UNDER GLASS</text>',
+         f'<circle class="rec" cx="{sx + sw - 26}" cy="{sy + 32}" r="5" fill="{RED}"/>']
+    if wide:
+        b += [name_dots([(" ".join(NAME), 0)], x0, y0, P, 4.8),
+              f'<text class="t" x="{m:.0f}" y="{sy + 152}" font-size="19" font-weight="700" fill="#fff">{e(ROLE)}</text>',
+              f'<text class="t" x="{m:.0f}" y="{sy + 176}" font-size="13.5" fill="#9a9a9a" letter-spacing="1.5">{e(WHERE)}</text>',
+              f'<text class="t" x="{W - m:.0f}" y="{sy + 152}" font-size="12" fill="#9a9a9a" text-anchor="end">NOW BUILDING</text>',
+              f'<text class="t" x="{W - m:.0f}" y="{sy + 176}" font-size="13.5" fill="#fff" text-anchor="end">{e(now_building(d))}</text>',
+              seg_bar(m, sy + 188, W - 2 * m, n=60, h=8)]
+    else:
+        b += [name_dots([(NAME[0], 0), (NAME[1], 9)], x0, 108, P, 4),
+              f'<text class="t" x="{m:.0f}" y="{sy + 230}" font-size="19" font-weight="700" fill="#fff">{e(ROLE)}</text>',
+              f'<text class="t" x="{m:.0f}" y="{sy + 252}" font-size="13.5" fill="#9a9a9a" letter-spacing="1.5">{e(WHERE)}</text>',
+              seg_bar(m, sy + 264, sw - 56),
+              f'<text class="t" x="{m:.0f}" y="{sy + 286}" font-size="12" fill="#9a9a9a">NOW BUILDING</text>',
+              f'<text class="t" x="{sx + sw - 28}" y="{sy + 286}" font-size="12" fill="#fff" text-anchor="end">{e(now_building(d))}</text>']
+    if not cover:
+        b.append(jelly(sx + 30, sx + sw - 30, sy, 10, 12 if wide else 11, "hj", dmax=20, dur=6.2))
+    else:
+        b.append(jelly(sx - 6, sx + sw + 6, sy + 4, 14, 13, "hc",
+                       dmin=sh * .95, dmax=sh * 1.05, dur=7.5, opacity=.985))
+    return W, sy + sh + sag + 14, b
 
 
 def header(d):
-    W, H, P = 480, 360, 10.2
-    x0, y0 = (W - 41 * P) / 2 + P / 2, 78
-    bx, bw = x0 - 4, 41 * P
-    b = header_top(W, H, x0, y0, P, 30) + [
-        f'<text class="t" x="28" y="38" font-size="12" fill="#8a8a8a">{USER.upper()}</text>',
-        f'<text class="t" x="430" y="38" font-size="12" fill="#8a8a8a" text-anchor="end">LIVE</text>',
-        f'<circle class="rec" cx="446" cy="34" r="5" fill="{RED}"/>',
-        name_dots([(NAME[0], 0), (NAME[1], 9)], x0, y0, P, 4),
-        f'<text class="t" x="{bx:.0f}" y="268" font-size="19" font-weight="700" fill="#fff">{e(ROLE)}</text>',
-        f'<text class="t" x="{bx:.0f}" y="292" font-size="13.5" fill="#9a9a9a" letter-spacing="1.5">{e(WHERE)}</text>',
-        seg_bar(bx, 310, bw),
-        f'<text class="t" x="{bx:.0f}" y="343" font-size="12" fill="#8a8a8a">NOW BUILDING</text>',
-        f'<text class="t" x="{bx+bw:.0f}" y="343" font-size="12" fill="#fff" text-anchor="end">{e(now_building(d))}</text>']
+    W, H, b = header_scene(d)
     return svg(W, H, "\n".join(b), HEAD_CSS)
 
 
 def header_wide(d):
-    """Desktop: the name on one line, a short banner."""
-    W, H, P = 960, 268, 12.2
-    _, cols = dotmap(" ".join(NAME))
-    x0, y0 = (W - (cols - 1) * P) / 2, 82
-    m = x0 - 4
-    b = header_top(W, H, x0, y0, P, 26) + [
-        f'<text class="t" x="{m:.0f}" y="44" font-size="12" fill="#8a8a8a">{USER.upper()}</text>',
-        f'<text class="t" x="{W-m-16:.0f}" y="44" font-size="12" fill="#8a8a8a" text-anchor="end">LIVE</text>',
-        f'<circle class="rec" cx="{W-m-4:.0f}" cy="40" r="5" fill="{RED}"/>',
-        name_dots([(" ".join(NAME), 0)], x0, y0, P, 4.8),
-        f'<text class="t" x="{m:.0f}" y="196" font-size="19" font-weight="700" fill="#fff">{e(ROLE)}</text>',
-        f'<text class="t" x="{m:.0f}" y="220" font-size="13.5" fill="#9a9a9a" letter-spacing="1.5">{e(WHERE)}</text>',
-        f'<text class="t" x="{W-m:.0f}" y="196" font-size="12" fill="#8a8a8a" text-anchor="end">NOW BUILDING</text>',
-        f'<text class="t" x="{W-m:.0f}" y="220" font-size="13.5" fill="#fff" text-anchor="end">{e(now_building(d))}</text>',
-        seg_bar(m, 238, W - 2 * m, n=60, h=8)]
+    W, H, b = header_scene(d, wide=True)
+    return svg(W, H, "\n".join(b), HEAD_CSS)
+
+
+def header_cover(d, wide=False):
+    W, H, b = header_scene(d, wide=wide, cover=True)
     return svg(W, H, "\n".join(b), HEAD_CSS)
 
 
@@ -426,12 +596,15 @@ def activity(d):
     left = (W - cols * P) / 2
     dots, oldest = field([r[1] for r in rows], left, 54, cols, 7, P, 11)
     since, count = field_labels(rows, oldest)
-    b = [panel(W, H, 26),
+    b = [f'<rect width="{W}" height="{H}" fill="#050505"/>',
+         dither(0, 0, W, H, void_shade(W, H, (W * .82, 34, 150, 64, .3), seed=5, stars=.0015), cell=7),
+         glass_slab(4, 4, W - 8, H - 8, 6, (W * .82, 30, 150, 64, .3), id_="a", sheen=0.),
          f'<text class="t" x="24" y="36" font-size="12" fill="#8a8a8a">ACTIVITY · {since}</text>',
          f'<text class="t" x="{W-24}" y="36" font-size="12" fill="#fff" text-anchor="end">{count} CONTRIBUTIONS</text>',
          dots,
-         f'<line x1="24" x2="{W-24}" y1="158" y2="158" stroke="#1e1e1e"/>',
-         stats(d, 24, 182, W - 48, 6, 2.4, 244)]
+         f'<line x1="24" x2="{W-24}" y1="158" y2="158" stroke="#242424"/>',
+         stats(d, 24, 182, W - 48, 6, 2.4, 244),
+         jelly(28, W - 28, H - 6, 5, 21, "aj", dmax=15, dur=6.4)]
     return svg(W, H, "\n".join(b), FIELD_CSS)
 
 
@@ -442,12 +615,15 @@ def activity_wide(d):
     fx = 32 + cols * P
     dots, oldest = field([r[1] for r in rows], 32, 58, cols, 7, P, 12)
     since, count = field_labels(rows, oldest)
-    b = [panel(W, H, 24),
+    b = [f'<rect width="{W}" height="{H}" fill="#050505"/>',
+         dither(0, 0, W, H, void_shade(W, H, (W * .85, 30, 170, 56, .3), seed=6, stars=.0015), cell=7),
+         glass_slab(4, 4, W - 8, H - 8, 6, (W * .85, 30, 170, 56, .3), id_="a", sheen=0.),
          f'<text class="t" x="32" y="40" font-size="12" fill="#8a8a8a">ACTIVITY · {since}</text>',
          f'<text class="t" x="{fx:.0f}" y="40" font-size="12" fill="#fff" text-anchor="end">{count} CONTRIBUTIONS</text>',
          dots,
-         f'<line x1="{fx+28:.0f}" x2="{fx+28:.0f}" y1="28" y2="{H-28}" stroke="#1e1e1e"/>',
-         stats(d, fx + 56, 70, W - (fx + 56) - 32, 6, 2.4, 140)]
+         f'<line x1="{fx+28:.0f}" x2="{fx+28:.0f}" y1="28" y2="{H-28}" stroke="#242424"/>',
+         stats(d, fx + 56, 70, W - (fx + 56) - 32, 6, 2.4, 140),
+         jelly(36, W - 36, H - 6, 5, 22, "aj", dmax=13, dur=6.9)]
     return svg(W, H, "\n".join(b), FIELD_CSS)
 
 
@@ -523,15 +699,33 @@ def pushed_line(x, y, pushed, bg, mute):
     return s + f'<text class="t" x="{x+14 if hot else x}" y="{y}" font-size="10" fill="{mute}" letter-spacing="1.5">PUSHED {when}</text>'
 
 
+def tile_glass(W, H, bg, i):
+    """Under-glass treatment for a tile: red corner glow and a diagonal sheen
+    on the dark tiles (dithered), nothing on the light ones."""
+    if bg not in ("#000", "#d71921"):
+        return ""
+    def fn(px, py):
+        vr = rad(px, py, W - 36, 26, 80, 48) * .22
+        t = (px / W + py / H * .62) / 1.62
+        vw = max(0., 1. - abs(t - .82) * 16.) * .12
+        if vw >= vr:
+            return (vw, "#ffffff") if vw > .07 else None
+        return (vr, "#7d0e0b" if bg == "#d71921" else DEEP)
+    return (f'<defs><clipPath id="tc"><rect width="{W}" height="{H}" rx="26"/></clipPath></defs>'
+            + dither(0, 0, W, H, fn, clip="tc"))
+
+
 def tile(i, name, info, desc):
     W = H = 200
     bg, fg, off, mute, meta, nm, pushed = tile_parts(i, name, info)
-    b = [tile_bg(W, H, bg), icon(ICONS.get(name, "heat"), 24, 26, fg, off, i * 7 + 3),
+    b = [tile_bg(W, H, bg), tile_glass(W, H, bg, i),
+         icon(ICONS.get(name, "heat"), 24, 26, fg, off, i * 7 + 3),
          index_dots(i, W - 22, 26, fg),
          f'<text class="t" x="{W-22}" y="72" font-size="11" fill="{mute}" text-anchor="end" letter-spacing="1">{e(meta)}</text>',
          f'<text x="22" y="120" font-family="{MONO}" font-size="{21 if len(nm) <= 11 else 18}" font-weight="800" fill="{fg}" letter-spacing="-.5">{e(nm)}</text>']
     b += [f'<text x="22" y="{145+k*19}" font-size="14.5" fill="{mute}">{e(ln)}</text>' for k, ln in enumerate(wrap(desc, 21))]
     b.append(pushed_line(22, 185, pushed, bg, mute))
+    b.append(jelly(24, W - 24, H - 4, 5, i * 31 + 5, "tj", dmax=15, dur=5.0 + i * .7))
     return svg(W, H, "\n".join(b), TILE_CSS)
 
 
@@ -539,12 +733,14 @@ def tile_wide(i, name, info, desc):
     """Desktop: a short horizontal card, the icon beside the words."""
     W, H = 400, 150
     bg, fg, off, mute, meta, nm, pushed = tile_parts(i, name, info)
-    b = [tile_bg(W, H, bg), icon(ICONS.get(name, "heat"), 30, 50, fg, off, i * 7 + 3),
+    b = [tile_bg(W, H, bg), tile_glass(W, H, bg, i),
+         icon(ICONS.get(name, "heat"), 30, 50, fg, off, i * 7 + 3),
          index_dots(i, W - 24, 24, fg),
          f'<text x="130" y="58" font-family="{MONO}" font-size="21" font-weight="800" fill="{fg}" letter-spacing="-.5">{e(nm)}</text>']
     b += [f'<text x="130" y="{84+k*19}" font-size="14.5" fill="{mute}">{e(ln)}</text>' for k, ln in enumerate(wrap(desc, 30))]
     b.append(pushed_line(130, 128, pushed, bg, mute))
     b.append(f'<text class="t" x="{W-24}" y="128" font-size="11" fill="{mute}" text-anchor="end" letter-spacing="1">{e(meta)}</text>')
+    b.append(jelly(110, W - 24, H - 4, 5, i * 31 + 5, "tj", dmax=12, dur=5.4 + i * .7))
     return svg(W, H, "\n".join(b), TILE_CSS)
 
 
@@ -554,14 +750,53 @@ def stack(W=480, H=64):
     widths = [len(t) * cw + pad * 2 for t in STACK]
     x = (W - sum(widths) - gap * (len(STACK) - 1)) / 2
     css = f".m{{font-family:{MONO};font-size:13px;font-weight:700}}"
-    b = [panel(W, H, 22)]
+    b = [f'<rect width="{W}" height="{H}" fill="#050505"/>',
+         dither(0, 0, W, H, void_shade(W, H, (16, 40, 44, 26, .32), seed=8, stars=.001), cell=7),
+         glass_slab(3, 3, W - 6, H - 6, 4, (16, 40, 44, 26, .32), id_="k", sheen=0.)]
     y = (H - 32) / 2
     for k, (t, w) in enumerate(zip(STACK, widths)):
         tl = len(t) * cw
-        b.append(f'<rect x="{x:.1f}" y="{y}" width="{w:.1f}" height="32" rx="16" fill="none" stroke="#444"/>'
+        b.append(f'<rect x="{x:.1f}" y="{y}" width="{w:.1f}" height="32" rx="16" fill="#080808" stroke="#444"/>'
                  f'<text class="m" x="{x+pad:.1f}" y="{y+21}" fill="#eee" textLength="{tl:.1f}">{t}</text>')
         x += w + gap
     return svg(W, H, "\n".join(b), css)
+
+
+# ------------------------------------------------------------------ portfolio
+PORTFOLIO_URL = "https://github.com/jaikhuranna/mysite"  # the live site once it ships
+
+
+def dot_text(s, x0, y0, pitch, r, fill=INK):
+    """A static dot-matrix word."""
+    pts, _ = dotmap(s)
+    return (f'<g fill="{fill}">' + "".join(
+        f'<circle cx="{x0 + c * pitch:.1f}" cy="{y0 + rr * pitch:.1f}" r="{r}"/>' for c, rr in pts) + '</g>')
+
+
+def portfolio(wide=False):
+    """A curved panel in the same void, linking to the portfolio site."""
+    if wide:
+        W, H = 960, 116
+        sx, sy, sw, sh, sag = 28, 18, 904, 80, 7
+    else:
+        W, H = 480, 118
+        sx, sy, sw, sh, sag = 20, 18, 440, 78, 7
+    glow = (W / 2, sy + sh, sw * .4, sh * .5, .35)
+    word, pitch, r = "PORTFOLIO", 5.6, 2.4
+    pts, cols = dotmap(word)
+    ww = (cols - 1) * pitch
+    b = [f'<rect width="{W}" height="{H}" fill="#050505"/>',
+         dither(0, 0, W, H, void_shade(W, H, glow, seed=9), cell=7),
+         glass_slab(sx, sy, sw, sh, sag, glow, id_="p"),
+         dot_text(word, sx + 30, sy + 18, pitch, r, INK)]
+    if wide:
+        b += [f'<text class="t" x="{sx + 34 + ww:.0f}" y="{sy + 64}" font-size="12" fill="#9a9a9a">THE WORK, LIVE IN A BROWSER</text>',
+              f'<text class="t" x="{sx + sw - 34}" y="{sy + 64}" font-size="15" fill="{RED}" text-anchor="end">OPEN →</text>']
+    else:
+        b += [f'<text class="t" x="{sx + 32}" y="{sy + 66}" font-size="12" fill="#9a9a9a">THE WORK, LIVE IN A BROWSER</text>',
+              f'<text class="t" x="{sx + sw - 32}" y="{sy + 66}" font-size="15" fill="{RED}" text-anchor="end">OPEN →</text>']
+    b.append(jelly(sx + 30, sx + sw - 30, sy, 7, 17, "pj", dmax=13, dur=6.6))
+    return svg(W, H, "\n".join(b), BASE_CSS)
 
 
 # ------------------------------------------------------------------ readme
@@ -578,12 +813,24 @@ def readme(d, files):
     rows = "\n".join(f'<p align="center">{" ".join(tiles[k:k+2])}</p>' for k in range(0, len(tiles), 2))
     soc = " &nbsp;·&nbsp; ".join(f'<a href="{u}">{n}</a>' for n, u in SOCIALS)
     act = f"{d.get('total', 0)} contributions in the last year · {d['repos']} repos · {d['followers']} followers · {d['stars']} stars"
+    head = pic("header.svg", "Jai Khurana, software engineer at PayGlocal, Bengaluru", "100%", files)
+    covered = pic("cover.svg", "The header under jelly — click to uncover the glass", "100%", files)
+    banner = f'<a href="{PORTFOLIO_URL}">{pic("portfolio.svg", "Portfolio — the work, live in a browser", "100%", files)}</a>'
     return f"""<!-- generated by scripts/build.py, refreshed by .github/workflows/refresh.yml; edit the script, not this file -->
-<p align="center">{pic("header.svg", "Jai Khurana, software engineer at PayGlocal, Bengaluru", "100%", files)}</p>
+<p align="center">
+<details>
+<summary>{covered}</summary>
+
+{head}
+
+</details>
+</p>
 
 <p align="center">{pic("activity.svg", act, "100%", files)}</p>
 
 {rows}
+
+<p align="center">{banner}</p>
 
 <p align="center">{pic("stack.svg", ", ".join(STACK), "100%", files)}</p>
 
@@ -594,6 +841,8 @@ def readme(d, files):
 def main():
     d = load()
     out = {"header.svg": header(d), "d-header.svg": header_wide(d),
+           "cover.svg": header_cover(d), "d-cover.svg": header_cover(d, wide=True),
+           "portfolio.svg": portfolio(), "d-portfolio.svg": portfolio(wide=True),
            "activity.svg": activity(d), "d-activity.svg": activity_wide(d),
            "stack.svg": stack(), "d-stack.svg": stack(960, 64)}
     for i, n in enumerate(PROJECTS):
