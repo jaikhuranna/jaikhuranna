@@ -75,7 +75,7 @@ def brick(draw,x,y,w,h,shade=4):
     draw.line((x+4,y+h-4,x+8,y+h-4),fill=COLORS[shade-1])
 
 
-def wall(w,h,label,index):
+def wall(w,h,label,index,prompt="CLICK TO BREAK"):
     im=Image.new('RGB',(w,h),COLORS[0]);d=ImageDraw.Draw(im)
     for row,y in enumerate(range(0,h,12)):
         for col,x in enumerate(range(-24 if row%2 else 0,w,32)):
@@ -92,7 +92,7 @@ def wall(w,h,label,index):
     d.rectangle((x+1,y+1,x+width-1,y+plate_h-1),fill=COLORS[1])
     center(d,label,y+(5 if tall else 3),w,scale)
     if tall:
-        center(d,'CLICK TO BREAK',y+plate_h-11,w,1,6)
+        center(d,prompt,y+plate_h-11,w,1,6)
     else:
         center(d,'CLICK',y+plate_h-8,w,1,6)
     if h>100:
