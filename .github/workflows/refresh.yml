@@ -23,22 +23,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-      - name: Install asset rendering dependencies
-        run: |
-          npm ci --no-audit --no-fund
-          python3 -m pip install -r scripts/requirements-render.txt
-      - name: Build existing panels and composite the original Opus jelly
+      - name: Install pixel-art renderer
+        run: python3 -m pip install -r scripts/requirements-render.txt
+      - name: Build profile panels and 16-bit brick reveals
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          python3 scripts/build.py --base-only
-          node scripts/capture/base-ci.mjs /tmp/profile-bases
-          python3 scripts/jelly_cover.py /tmp/profile-bases
-          python3 scripts/build.py --cached
+        run: python3 scripts/build.py
       - name: Commit if anything changed
         run: |
           git add -A README.md assets
