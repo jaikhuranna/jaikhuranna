@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ["scripts/**", "package*.json", "assets/intro.json", ".github/workflows/refresh.yml"]
+    paths: ["scripts/**", ".github/workflows/refresh.yml"]
 
 permissions:
   contents: write
@@ -23,7 +23,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Refresh the original linked profile panels
+      - name: Build README and SVGs from live GitHub data
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 scripts/build.py
