@@ -1,7 +1,0 @@
-{
-  "name": "jaikhuranna-profile-assets",
-  "private": true,
-  "type": "module",
-  "description": "Manual rendering for the native one-tap profile intro.",
-  "devDependencies": { "puppeteer-core": "24.43.1" }
-}
