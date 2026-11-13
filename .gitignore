@@ -1,0 +1,4 @@
+node_modules/
+__pycache__/
+.DS_Store
+scripts/capture/profile-preview.html

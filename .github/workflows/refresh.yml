@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ["scripts/**", ".github/workflows/refresh.yml"]
+    paths: ["scripts/**", "package*.json", ".github/workflows/refresh.yml"]
 
 permissions:
   contents: write
@@ -23,10 +23,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Build README and SVGs from live GitHub data
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install asset rendering dependencies
+        run: |
+          npm ci --no-audit --no-fund
+          python3 -m pip install -r scripts/requirements-render.txt
+      - name: Build existing panels and composite the original Opus jelly
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 scripts/build.py
+        run: |
+          python3 scripts/build.py --base-only
+          node scripts/capture/base-ci.mjs /tmp/profile-bases
+          python3 scripts/jelly_cover.py /tmp/profile-bases
+          python3 scripts/build.py --cached
       - name: Commit if anything changed
         run: |
           git add -A README.md assets

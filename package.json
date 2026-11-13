@@ -1,0 +1,7 @@
+{
+  "name": "jaikhuranna-profile-assets",
+  "private": true,
+  "type": "module",
+  "description": "Build-time rendering for the existing profile panels under the original Opus jelly.",
+  "devDependencies": { "puppeteer-core": "24.43.1" }
+}
