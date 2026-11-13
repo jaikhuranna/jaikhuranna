@@ -1,5 +1,6 @@
-The cover uses the unmodified `scripts/vendor/opus-jelly/jelly.js` renderer
-recovered from the original Claude/Opus browser implementation.
+The cover uses the material-refined `scripts/vendor/opus-jelly/jelly.js` renderer
+derived from the original Claude/Opus browser implementation. See
+`../vendor/opus-jelly/SOURCE.md` for the material changes.
 
 To regenerate the transparent recordings:
 
