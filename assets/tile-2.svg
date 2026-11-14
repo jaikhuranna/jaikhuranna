@@ -19,5 +19,5 @@
 <text x="22" y="120" font-family="ui-monospace,SFMono-Regular,'SF Mono','Roboto Mono',Menlo,Consolas,'DejaVu Sans Mono',monospace" font-size="21" font-weight="800" fill="#f4f4f4" letter-spacing="-.5">AIusageBar</text>
 <text x="22" y="145" font-size="14.5" fill="#8a8a8a">Claude usage limits</text>
 <text x="22" y="164" font-size="14.5" fill="#8a8a8a">on desktop &amp; wrist</text>
-<circle class="rec" cx="26" cy="181" r="3.5" fill="#ff3b30"/><text class="t" x="36" y="185" font-size="10" fill="#8a8a8a" letter-spacing="1.5">PUSHED 3D AGO</text>
+<circle class="rec" cx="26" cy="181" r="3.5" fill="#ff3b30"/><text class="t" x="36" y="185" font-size="10" fill="#8a8a8a" letter-spacing="1.5">PUSHED 4D AGO</text>
 </svg>
