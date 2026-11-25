@@ -8,4 +8,4 @@
 
 <p align="center"><picture><source media="(min-width: 1012px)" srcset="https://raw.githubusercontent.com/jaikhuranna/jaikhuranna/main/assets/d-stack.svg?v=7909ba81"><img src="assets/stack.svg?v=e83095af" width="100%" alt="GO, KOTLIN, SWIFT, TYPESCRIPT, SQL"></picture></p>
 
-<p align="center"><a href="https://linkedin.com/in/jaikhuranna">LinkedIn</a> &nbsp;·&nbsp; <a href="https://instagram.com/jaikhuranna">Instagram</a> &nbsp;·&nbsp; <a href="https://twitter.com/commondumlow">Twitter</a></p>
+<p align="center"><a href="https://linkedin.com/in/jaikhuranna">LinkedIn</a> &nbsp;·&nbsp; <a href="https://instagram.com/jaikhuranna">Instagram</a> &nbsp;·&nbsp; <a href="jaikhuranna">Twitter</a></p>
